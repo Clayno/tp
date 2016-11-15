@@ -19,11 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{2BE85E3E-BB55-4354-AEB7-744307CBED64}</ProjectGuid>
+    <ProjectGuid>{FA9D5CFA-925E-4D49-8328-710099EA8752}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>tp</RootNamespace>
+    <RootNamespace>client</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-    <ProjectName>serveur</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -143,12 +142,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="serveur.cpp" />
-    <ClCompile Include="threaded-server.cpp" />
-    <ClCompile Include="ws-util.cpp" />
+    <ClCompile Include="..\tp\ws-util.cpp" />
+    <ClCompile Include="client.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ws-util.h" />
+    <ClInclude Include="..\tp\ws-util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
