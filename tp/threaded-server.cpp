@@ -1,4 +1,6 @@
 /***********************************************************************
+Site: https://tangentsoft.net/wskfaq/examples/basics/threaded-server.html
+
 threaded-server.cpp - Implements a simple Winsock server that accepts
 connections and spins each one off into its own thread, where it's
 treated as a blocking socket.
@@ -17,22 +19,32 @@ ABSOLUTELY NO WARRANTY WHATSOEVER for this product.  Caveat hacker.
 #include "ws-util.h"
 
 #include <winsock.h>
-
+#include <ctime>
 #include <iostream>
+#include <fstream>
+#include <string>
 
 using namespace std;
 
+//struct CANDIDAT {
+//	char *nom;
+//	int nbVotes;
+//};
 
 //// Constants /////////////////////////////////////////////////////////
 
 const int kBufferSize = 1024;
-
+char *cand;
+int cand_length;
+//struct CANDIDAT resultats[];
 
 //// Prototypes ////////////////////////////////////////////////////////
 
 SOCKET SetUpListener(const char* pcAddress, int nPort);
 void AcceptConnections(SOCKET ListeningSocket);
-bool EchoIncomingPackets(SOCKET sd);
+bool sendMessage(SOCKET sd);
+bool getResult(SOCKET sd);
+DWORD WINAPI voterHandler(void* sd_);
 
 
 //// DoWinsock /////////////////////////////////////////////////////////
@@ -41,20 +53,54 @@ bool EchoIncomingPackets(SOCKET sd);
 
 int DoWinsock(const char* pcAddress, int nPort)
 {
+	// Lecture du fichier contenant les candidats
+	ifstream fichier("candidats.txt");
+
+	if (fichier)
+	{
+		// get length of file:
+		fichier.seekg(0, fichier.end);
+		int length = fichier.tellg();
+		fichier.seekg(0, fichier.beg);
+		char * buffer = new char[length];
+		fichier.read(buffer, length);
+		buffer[length] = '\0';
+		cand_length = length;
+		cand = buffer;
+
+		string ligne;
+		int size = 0;
+		while (getline(fichier, ligne)) {
+			size++;
+		}
+		//resultats = new struct CANDIDAT[size];
+	}
+	else
+	{
+		cout << "ERREUR: Impossible d'ouvrir le fichier en lecture." << endl;
+		return 0;
+	}
+
+	
+	// Lancement du listener
 	cout << "Establishing the listener..." << endl;
 	SOCKET ListeningSocket = SetUpListener(pcAddress, htons(nPort));
 	if (ListeningSocket == INVALID_SOCKET) {
 		cout << endl << WSAGetLastErrorMessage("establish listener") <<
 			endl;
+		delete[] cand;
+		//delete[] resultats;
 		return 3;
 	}
 	cout << "Adresse ip : " << pcAddress << endl;
-	cout << "Port d'écoute : " << nPort << endl;
-	cout << "Waiting for connections..." << flush;
+	cout << "Port d'ecoute : " << nPort << endl;
+	cout << "Waiting for connections..." << flush << endl;
 	while (1) {
 		AcceptConnections(ListeningSocket);
 		cout << "Acceptor restarting..." << endl;
 	}
+	delete[] cand;
+	//delete[] resultats;
 
 #if defined(_MSC_VER)
 	return 0;   // warning eater
@@ -92,17 +138,74 @@ SOCKET SetUpListener(const char* pcAddress, int nPort)
 }
 
 
-//// EchoHandler ///////////////////////////////////////////////////////
-// Handles the incoming data by reflecting it back to the sender.
+//// AcceptConnections /////////////////////////////////////////////////
+// Spins forever waiting for connections.  For each one that comes in, 
+// we create a thread to handle it and go back to waiting for
+// connections.  If an error occurs, we return.
 
-DWORD WINAPI EchoHandler(void* sd_)
+void AcceptConnections(SOCKET ListeningSocket)
 {
+	sockaddr_in sinRemote;
+	int nAddrSize = sizeof(sinRemote);
+
+	while (1) {
+		SOCKET sd = accept(ListeningSocket, (sockaddr*)&sinRemote,
+			&nAddrSize);
+		if (sd != INVALID_SOCKET) {
+			// Récupération du temps local
+			time_t now = time(0);
+			struct tm *time = localtime(&now);
+			// Ouverture du journal des connexions
+			string const nomFichier("journal.txt");
+			ofstream flux(nomFichier.c_str(), ios::app);
+			if (!flux) {
+				cout << "ERREUR: Impossible d'ouvrir le fichier." << endl;
+			}
+			else
+			{
+				// ecriture dans le journal
+				flux << time->tm_hour << ":";
+				flux << time->tm_min << ":";
+				flux << time->tm_sec << "  ";
+				flux << "connexion from " <<
+					inet_ntoa(sinRemote.sin_addr) << ":" <<
+					ntohs(sinRemote.sin_port) << "." <<
+					endl;
+			}
+			// écriture dans le terminal du serveur
+			cout << time->tm_hour << ":";
+			cout << time->tm_min << ":";
+			cout << time->tm_sec << "  ";
+			cout << "Accepted connection from " <<
+				inet_ntoa(sinRemote.sin_addr) << ":" <<
+				ntohs(sinRemote.sin_port) << "." <<
+				endl;
+			// Lancement du thread
+			DWORD nThreadID;
+			CreateThread(0, 0, voterHandler, (void*)sd, 0, &nThreadID);
+		}
+		else {
+			cerr << WSAGetLastErrorMessage("accept() failed") <<
+				endl;
+			return;
+		}
+	}
+}
+
+
+DWORD WINAPI voterHandler(void* sd_) {
 	int nRetval = 0;
 	SOCKET sd = (SOCKET)sd_;
-
-	if (!EchoIncomingPackets(sd)) {
+	
+	if (!sendMessage(sd)) {
 		cerr << endl << WSAGetLastErrorMessage(
-			"Echo incoming packets failed") << endl;
+			"Problème lors de l'envoi de la liste des candidats") << endl;
+		nRetval = 3;
+	}
+
+	if (!getResult(sd)) {
+		cerr << endl << WSAGetLastErrorMessage(
+			"Problème lors de la récupération de la réponse") << endl;
 		nRetval = 3;
 	}
 
@@ -120,43 +223,25 @@ DWORD WINAPI EchoHandler(void* sd_)
 }
 
 
-//// AcceptConnections /////////////////////////////////////////////////
-// Spins forever waiting for connections.  For each one that comes in, 
-// we create a thread to handle it and go back to waiting for
-// connections.  If an error occurs, we return.
-
-void AcceptConnections(SOCKET ListeningSocket)
-{
-	sockaddr_in sinRemote;
-	int nAddrSize = sizeof(sinRemote);
-
-	while (1) {
-		SOCKET sd = accept(ListeningSocket, (sockaddr*)&sinRemote,
-			&nAddrSize);
-		if (sd != INVALID_SOCKET) {
-			cout << "Accepted connection from " <<
-				inet_ntoa(sinRemote.sin_addr) << ":" <<
-				ntohs(sinRemote.sin_port) << "." <<
-				endl;
-
-			DWORD nThreadID;
-			CreateThread(0, 0, EchoHandler, (void*)sd, 0, &nThreadID);
+bool sendMessage(SOCKET sd) {
+		int nTemp = send(sd, cand, cand_length, 0);
+		if (nTemp > 0) {
+			cout << "Sent " << nTemp <<
+				" bytes back to client." << endl;
+		}
+		else if (nTemp == SOCKET_ERROR) {
+			return false;
 		}
 		else {
-			cerr << WSAGetLastErrorMessage("accept() failed") <<
+			// Client closed connection before we could reply to
+			// all the data it sent, so bomb out early.
+			cout << "Peer unexpectedly dropped connection!" <<
 				endl;
-			return;
 		}
-	}
+	return true;
 }
 
-
-//// EchoIncomingPackets ///////////////////////////////////////////////
-// Bounces any incoming packets back to the client.  We return false
-// on errors, or true if the client closed the socket normally.
-
-bool EchoIncomingPackets(SOCKET sd)
-{
+bool getResult(SOCKET sd) {
 	// Read data from client
 	char acReadBuffer[kBufferSize];
 	int nReadBytes;
@@ -164,28 +249,9 @@ bool EchoIncomingPackets(SOCKET sd)
 		nReadBytes = recv(sd, acReadBuffer, kBufferSize, 0);
 		if (nReadBytes > 0) {
 			cout << "Received " << nReadBytes <<
-				" bytes from client." << endl;
+				" bytes from client." << endl;;
+			printf("La réponse est : %s\n", acReadBuffer);
 
-			int nSentBytes = 0;
-			while (nSentBytes < nReadBytes) {
-				int nTemp = send(sd, acReadBuffer + nSentBytes,
-					nReadBytes - nSentBytes, 0);
-				if (nTemp > 0) {
-					cout << "Sent " << nTemp <<
-						" bytes back to client." << endl;
-					nSentBytes += nTemp;
-				}
-				else if (nTemp == SOCKET_ERROR) {
-					return false;
-				}
-				else {
-					// Client closed connection before we could reply to
-					// all the data it sent, so bomb out early.
-					cout << "Peer unexpectedly dropped connection!" <<
-						endl;
-					return true;
-				}
-			}
 		}
 		else if (nReadBytes == SOCKET_ERROR) {
 			return false;

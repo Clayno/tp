@@ -108,13 +108,24 @@ int __cdecl main(int argc, char **argv)
 	printf("Connecte au serveur %s:%s\n\n", host, port);
 	freeaddrinfo(result);
 
+	// Lecture de la liste des candidats
+	char acReadBuffer[1024]; // Que se passe-t-il si l'on reçoit plus de 1024 B?
+	int nReadBytes = recv(leSocket, acReadBuffer, 1024, 0);
+	if (nReadBytes > 0) {
+		printf("Nombre d'octets recus : %d\n", nReadBytes);
+		acReadBuffer[nReadBytes] = '\0';
+		printf("La liste des candidats est :\n %s\n", acReadBuffer);
+	}
+	else {
+		printf("Erreur de reception : %d\n", WSAGetLastError());
+	}
+
 	//----------------------------
 	// Demander à l'usager un mot a envoyer au serveur
 	printf("Saisir un mot de 7 lettres pour envoyer au serveur: ");
 	gets_s(motEnvoye);
 
-	//-----------------------------
-	// Envoyer le mot au serveur
+	// Envoi du vote
 	iResult = send(leSocket, motEnvoye, 7, 0);
 	if (iResult == SOCKET_ERROR) {
 		printf("Erreur du send: %d\n", WSAGetLastError());
@@ -127,18 +138,6 @@ int __cdecl main(int argc, char **argv)
 	}
 
 	printf("Nombre d'octets envoyes : %ld\n", iResult);
-
-	//------------------------------
-	// Maintenant, on va recevoir l' information envoyée par le serveur
-	iResult = recv(leSocket, motRecu, 7, 0);
-	if (iResult > 0) {
-		printf("Nombre d'octets recus: %d\n", iResult);
-		motRecu[iResult] = '\0';
-		printf("Le mot recu est %*s\n", iResult, motRecu);
-	}
-	else {
-		printf("Erreur de reception : %d\n", WSAGetLastError());
-	}
 
 	// cleanup
 	closesocket(leSocket);
