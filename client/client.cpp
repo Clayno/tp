@@ -17,7 +17,7 @@ int __cdecl main(int argc, char **argv)
 	struct addrinfo *result = NULL,
 		*ptr = NULL,
 		hints;
-	char motEnvoye[10];
+	char motEnvoye[32];
 	char motRecu[10];
 	int iResult;
 
@@ -90,7 +90,6 @@ int __cdecl main(int argc, char **argv)
 	sockaddr_in *adresse;
 	adresse = (struct sockaddr_in *) result->ai_addr;
 	//----------------------------------------------------
-	printf("Adresse trouvee pour le serveur %s : %s\n\n", host, inet_ntoa(adresse->sin_addr));
 	printf("Tentative de connexion au serveur %s avec le port %s\n\n", inet_ntoa(adresse->sin_addr), port);
 
 	// On va se connecter au serveur en utilisant l'adresse qui se trouve dans
@@ -112,7 +111,6 @@ int __cdecl main(int argc, char **argv)
 	char acReadBuffer[1024]; // Que se passe-t-il si l'on reçoit plus de 1024 B?
 	int nReadBytes = recv(leSocket, acReadBuffer, 1024, 0);
 	if (nReadBytes > 0) {
-		printf("Nombre d'octets recus : %d\n", nReadBytes);
 		acReadBuffer[nReadBytes] = '\0';
 		printf("La liste des candidats est :\n %s\n", acReadBuffer);
 	}
@@ -120,13 +118,15 @@ int __cdecl main(int argc, char **argv)
 		printf("Erreur de reception : %d\n", WSAGetLastError());
 	}
 
-	//----------------------------
-	// Demander à l'usager un mot a envoyer au serveur
-	printf("Saisir un mot de 7 lettres pour envoyer au serveur: ");
-	gets_s(motEnvoye);
+	// Demande du vote
+	printf("Entrer le numero du candidat choisi : ");
+	scanf_s("%s", motEnvoye, 32);
+	// Reset du flux d'entrée
+	std::cin.clear();
+	std::cin.ignore();
 
 	// Envoi du vote
-	iResult = send(leSocket, motEnvoye, 7, 0);
+	iResult = send(leSocket, motEnvoye, 32, 0);
 	if (iResult == SOCKET_ERROR) {
 		printf("Erreur du send: %d\n", WSAGetLastError());
 		closesocket(leSocket);

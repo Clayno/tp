@@ -1,4 +1,4 @@
-/***********************************************************************
+Ôªø/***********************************************************************
 Site: https://tangentsoft.net/wskfaq/examples/basics/threaded-server.html
 
 threaded-server.cpp - Implements a simple Winsock server that accepts
@@ -35,9 +35,10 @@ typedef struct Candidat
 //// Constants /////////////////////////////////////////////////////////
 
 const int kBufferSize = 1024;
-char *cand;
-int cand_length;
-Candidat *resultats;
+char *cand; // Contenu du fichier candidats.txt
+int cand_length; // Taille en bytes du fichiers candidats.txt
+int nbCand; // Nombre de candidats
+Candidat *resultats; // Tableau des r√©sultats du vote
 
 //// Prototypes ////////////////////////////////////////////////////////
 
@@ -55,16 +56,20 @@ DWORD WINAPI voterHandler(void* sd_);
 int DoWinsock(const char* pcAddress, int nPort)
 {
 	// Lecture du fichier contenant les candidats
-	ifstream fichier("log/candidats.txt");
+	ifstream fichier("candidats.txt");
 	if (fichier)
 	{
-		// get length of file:
+		// Obtiention du nombre de candidats
 		string ligne;
 		int size = 0;
 		while (getline(fichier, ligne)) {
 			size++;
 		}
+		nbCand = size;
 
+		//  R√©cup√©ration des bytes du fichiers candidats.txt
+		fichier.clear();
+		fichier.seekg(0, fichier.beg);
 		fichier.seekg(0, fichier.end);
 		int length = fichier.tellg();
 		fichier.seekg(0, fichier.beg);
@@ -72,8 +77,10 @@ int DoWinsock(const char* pcAddress, int nPort)
 		fichier.read(buffer, length);
 		buffer[length] = '\0';
 		cand = buffer;
-		cand_length = size;
+		cand_length = length;
 
+		// Remplissage du tableau r√©sultats
+		fichier.clear();
 		resultats = new Candidat[size];
 		fichier.seekg(0 ,fichier.beg);
 		int i = 0;
@@ -81,6 +88,7 @@ int DoWinsock(const char* pcAddress, int nPort)
 			char *ptr(0);
 			ptr = strtok(&ligne[0], ":");
 			resultats[i].nom = strdup(strtok(NULL, ":"));
+			resultats[i].nbVotes = 0;
 			i++;
 		}
 		fichier.close();
@@ -109,9 +117,7 @@ int DoWinsock(const char* pcAddress, int nPort)
 		AcceptConnections(ListeningSocket);
 		cout << "Acceptor restarting..." << endl;
 	}
-	for (int i = 0; i < cand_length; i++) {
-		cout << resultats[i].nom << " : " << resultats[i].nbVotes << endl;
-	}
+	
 	delete[] cand;
 	delete[] resultats;
 
@@ -165,7 +171,7 @@ void AcceptConnections(SOCKET ListeningSocket)
 		SOCKET sd = accept(ListeningSocket, (sockaddr*)&sinRemote,
 			&nAddrSize);
 		if (sd != INVALID_SOCKET) {
-			// RÈcupÈration du temps local
+			// RÔøΩcupÔøΩration du temps local
 			time_t now = time(0);
 			struct tm *time = localtime(&now);
 			// Ouverture du journal des connexions
@@ -185,7 +191,7 @@ void AcceptConnections(SOCKET ListeningSocket)
 					ntohs(sinRemote.sin_port) << "." <<
 					endl;
 			}
-			// Ècriture dans le terminal du serveur
+			// ÔøΩcriture dans le terminal du serveur
 			cout << time->tm_hour << ":";
 			cout << time->tm_min << ":";
 			cout << time->tm_sec << "  ";
@@ -212,14 +218,18 @@ DWORD WINAPI voterHandler(void* sd_) {
 	
 	if (!sendMessage(sd)) {
 		cerr << endl << WSAGetLastErrorMessage(
-			"ProblËme lors de l'envoi de la liste des candidats") << endl;
+			"ProblÔøΩme lors de l'envoi de la liste des candidats") << endl;
 		nRetval = 3;
 	}
 
 	if (!getResult(sd)) {
 		cerr << endl << WSAGetLastErrorMessage(
-			"ProblËme lors de la rÈcupÈration de la rÈponse") << endl;
+			"ProblÔøΩme lors de la rÔøΩcupÔøΩration de la rÔøΩponse") << endl;
 		nRetval = 3;
+	}
+
+	for (int i = 0; i < nbCand; i++) {
+		cout << resultats[i].nom << " : " << resultats[i].nbVotes << endl;
 	}
 
 	cout << "Shutting connection down..." << flush;
@@ -231,6 +241,7 @@ DWORD WINAPI voterHandler(void* sd_) {
 			"Connection shutdown failed") << endl;
 		nRetval = 3;
 	}
+
 
 	return nRetval;
 }
@@ -256,16 +267,16 @@ bool sendMessage(SOCKET sd) {
 
 bool getResult(SOCKET sd) {
 	// Read data from client
-	char acReadBuffer[kBufferSize];
+	char acReadBuffer[32];
 	int nReadBytes;
-	nReadBytes = recv(sd, acReadBuffer, kBufferSize, 0);
+	nReadBytes = recv(sd, acReadBuffer, 32, 0);
 	if (nReadBytes > 0) {
 		cout << "Received " << nReadBytes <<
 			" bytes from client." << endl;;
-		printf("La rÈponse est : %s\n", acReadBuffer);
+		printf("La reponse est : %s\n", acReadBuffer);
 		int res = atoi(acReadBuffer);
-		if (res < cand_length && res >= 0) {
-			resultats[res].nbVotes++;
+		if (res < cand_length && res > 0) {
+			resultats[res-1].nbVotes++;
 		}
 		else {
 			return false;
